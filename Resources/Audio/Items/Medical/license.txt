@@ -9,3 +9,5 @@ Additional sound effects from https://www.zapsplat.com
 
 foley-cloth-denim-rip-003.mp3 -
 zapsplat_food_bottle_golden_syrup_cap_open_then_close.mp3
+
+bloodfilter is hypnospray reversed

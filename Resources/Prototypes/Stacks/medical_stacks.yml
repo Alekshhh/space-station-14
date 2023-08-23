@@ -54,4 +54,10 @@
   maxCount: 10
   itemSize: 1
 
-
+- type: stack
+  id: BloodFilter
+  name: blood-filter
+  icon: {sprite: "/Textures/Objects/Specific/Medical/medical.rsi", state: blood-filter}
+  spawn: BloodFilter
+  maxCount: 5
+  itemSize: 2

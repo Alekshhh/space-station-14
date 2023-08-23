@@ -109,6 +109,47 @@
     size: 1
 
 - type: entity
+  name: blood filter
+  description: Siphons out blood from the bloodstream and filters out the poison.
+  parent: BaseHealingItem
+  suffix: Full
+  id: BloodFilter
+  components:
+  - type: Tag
+    tags:
+    - BloodFilter
+  - type: Sprite
+    state: blood-filter
+  - type: Item
+    heldPrefix: blood-filter
+  - type: Healing
+    damageContainers:
+      - Biological
+    damage:
+      types:
+        Poison: -10
+    healingBeginSound:
+      path: "/Audio/Items/Medical/bloodfilter.ogg"
+    healingEndSound:
+      path: "/Audio/Items/hypospray.ogg"
+  - type: Stack
+    stackType: BloodFilter
+    count: 5
+  - type: StackPrice
+    price: 50
+
+- type: entity
+  id: BloodFilter1
+  parent: BloodFilter
+  suffix: Single
+  components:
+  - type: Stack
+    stackType: BloodFilter
+    count: 1
+  - type: Item
+    size: 1
+
+- type: entity
   name: bruise pack
   description: A therapeutic gel pack and bandages designed to treat blunt-force trauma.
   parent: BaseHealingItem

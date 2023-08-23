@@ -63,6 +63,17 @@
 		{
 			"name": "regenerative-mesh-inhand-right",
 			"directions": 4
+		},
+		{
+			"name": "blood-filter"
+		},
+		{
+			"name": "blood-filter-inhand-left",
+			"directions": 4
+		},
+		{
+			"name": "blood-filter-inhand-right",
+			"directions": 4
 		}
 	]
 }
