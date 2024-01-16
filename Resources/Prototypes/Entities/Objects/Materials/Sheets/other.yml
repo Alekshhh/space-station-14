@@ -5,11 +5,10 @@
   description: A sheet of material, used often on the station in various applications.
   components:
   - type: Sprite
-    netsync: false
     sprite: Objects/Materials/Sheets/other.rsi
   - type: Item
     sprite: Objects/Materials/Sheets/other.rsi
-  - type: ItemStatus
+    size: Normal
   - type: Tag
     tags:
     - Sheet
@@ -24,6 +23,10 @@
       behaviors:
       - !type:DoActsBehavior
         acts: [ "Destruction" ]
+  - type: SolutionContainerManager
+    solutions:
+      paper:
+        canReact: false
 
 - type: entity
   parent: SheetOtherBase
@@ -38,6 +41,10 @@
     - paper
     - paper_2
     - paper_3
+  - type: Material
+  - type: PhysicalComposition
+    materialComposition:
+      Paper: 100
   - type: Sprite
     state: paper_3
     layers:
@@ -46,6 +53,15 @@
   - type: Item
     heldPrefix: paper
   - type: Appearance
+  - type: Extractable
+    grindableSolutionName: paper
+  - type: SolutionContainerManager
+    solutions:
+      paper:
+        reagents:
+        - ReagentId: Cellulose
+          Quantity: 3
+
 
 - type: entity
   parent: SheetPaper
@@ -91,6 +107,7 @@
         reagents:
         - ReagentId: Plasma
           Quantity: 10
+        canReact: false
   - type: Tag
     tags:
     - Sheet
@@ -136,6 +153,28 @@
   - type: Item
     heldPrefix: plastic
   - type: Appearance
+  - type: Extractable
+    grindableSolutionName: plastic
+  - type: SolutionContainerManager
+    solutions:
+      plastic:
+        reagents:
+        - ReagentId: Oil
+          Quantity: 5
+        - ReagentId: Phosphorus
+          Quantity: 5
+        canReact: false
+
+- type: entity
+  parent: SheetPlastic
+  id: SheetPlastic10
+  name: plastic
+  suffix: 10
+  components:
+  - type: Sprite
+    state: plastic
+  - type: Stack
+    count: 10
 
 - type: entity
   parent: SheetPlastic
@@ -157,6 +196,7 @@
   - type: Material
   - type: Food
     transferAmount: 10
+  - type: BadFood
   - type: PhysicalComposition
     materialComposition:
       Uranium: 100
@@ -182,7 +222,10 @@
       food:
         reagents:
         - ReagentId: Uranium
-          Quantity: 10
+          Quantity: 8
+        - ReagentId: Radium
+          Quantity: 2
+        canReact: false
 
 - type: entity
   parent: SheetUranium
@@ -192,3 +235,54 @@
   components:
   - type: Stack
     count: 1
+
+- type: entity
+  parent: SheetOtherBase
+  id: MaterialSheetMeat
+  name: meat sheet
+  suffix: Full
+  components:
+    - type: Sprite
+      sprite: Objects/Materials/Sheets/meaterial.rsi
+      layers:
+      - state: meat_3
+        map: [ "base" ]
+    - type: Tag
+      tags:
+      - Sheet
+      - DroneUsable
+    - type: Material
+    - type: PhysicalComposition
+      materialComposition:
+        Meaterial: 100
+    - type: Stack
+      stackType: MeatSheets
+      baseLayer: base
+      layerStates:
+        - meat
+        - meat_2
+        - meat_3
+    - type: Item
+      sprite: Objects/Materials/Sheets/meaterial.rsi
+      heldPrefix: meat
+    - type: Extractable
+      grindableSolutionName: meatsheet
+    - type: SolutionContainerManager
+      solutions:
+        meatsheet:
+          reagents:
+          - ReagentId: Protein
+            Quantity: 7
+          - ReagentId: Fat
+            Quantity: 3
+          canReact: false
+
+- type: entity
+  parent: MaterialSheetMeat
+  id: MaterialSheetMeat1
+  suffix: Single
+  components:
+    - type: Sprite
+      state: meat
+    - type: Stack
+      count: 1

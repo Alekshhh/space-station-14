@@ -87,4 +87,12 @@ public enum LogType
     EntityDelete = 82,
     Vote = 83,
     ItemConfigure = 84,
+    DeviceLinking = 85,
+    Tile = 86,
+
+    /// <summary>
+    /// A client has sent too many chat messages recently and is temporarily blocked from sending more.
+    /// </summary>
+    ChatRateLimited = 87,
+    AtmosTemperatureChanged = 88,
 }

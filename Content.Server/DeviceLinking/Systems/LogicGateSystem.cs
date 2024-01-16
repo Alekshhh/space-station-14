@@ -1,13 +1,12 @@
 using Content.Server.DeviceLinking.Components;
 using Content.Server.DeviceNetwork;
-using Content.Server.MachineLinking.Events;
 using Content.Shared.DeviceLinking;
 using Content.Shared.Examine;
 using Content.Shared.Interaction;
-using Content.Shared.Tools;
 using Content.Shared.Popups;
-using Robust.Shared.Audio;
-using Robust.Shared.Utility;
+using Content.Shared.Timing;
+using Content.Shared.Tools.Systems;
+using Robust.Shared.Audio.Systems;
 using SignalReceivedEvent = Content.Server.DeviceLinking.Events.SignalReceivedEvent;
 
 namespace Content.Server.DeviceLinking.Systems;
@@ -19,6 +18,7 @@ public sealed class LogicGateSystem : EntitySystem
     [Dependency] private readonly SharedAudioSystem _audio = default!;
     [Dependency] private readonly SharedPopupSystem _popup = default!;
     [Dependency] private readonly SharedToolSystem _tool = default!;
+    [Dependency] private readonly UseDelaySystem _useDelay = default!;
 
     private readonly int GateCount = Enum.GetValues(typeof(LogicGate)).Length;
 
@@ -30,6 +30,26 @@ public sealed class LogicGateSystem : EntitySystem
         SubscribeLocalEvent<LogicGateComponent, ExaminedEvent>(OnExamined);
         SubscribeLocalEvent<LogicGateComponent, InteractUsingEvent>(OnInteractUsing);
         SubscribeLocalEvent<LogicGateComponent, SignalReceivedEvent>(OnSignalReceived);
+    }
+
+    public override void Update(float deltaTime)
+    {
+        var query = EntityQueryEnumerator<LogicGateComponent>();
+        while (query.MoveNext(out var uid, out var comp))
+        {
+            // handle momentary pulses - high when received then low the next tick
+            if (comp.StateA == SignalState.Momentary)
+            {
+                comp.StateA = SignalState.Low;
+            }
+            if (comp.StateB == SignalState.Momentary)
+            {
+                comp.StateB = SignalState.High;
+            }
+
+            // output most likely changed so update it
+            UpdateOutput(uid, comp);
+        }
     }
 
     private void OnInit(EntityUid uid, LogicGateComponent comp, ComponentInit args)
@@ -49,6 +69,11 @@ public sealed class LogicGateSystem : EntitySystem
     private void OnInteractUsing(EntityUid uid, LogicGateComponent comp, InteractUsingEvent args)
     {
         if (args.Handled || !_tool.HasQuality(args.Used, comp.CycleQuality))
+            return;
+
+        // no sound spamming
+        if (TryComp<UseDelayComponent>(uid, out var useDelay)
+            && !_useDelay.TryResetDelay((uid, useDelay), true))
             return;
 
         // cycle through possible gates
@@ -92,8 +117,9 @@ public sealed class LogicGateSystem : EntitySystem
     private void UpdateOutput(EntityUid uid, LogicGateComponent comp)
     {
         // get the new output value now that it's changed
-        var a = comp.StateA == SignalState.High;
-        var b = comp.StateB == SignalState.High;
+        // momentary is treated as high for the current tick, after updating it will be reset to low
+        var a = comp.StateA != SignalState.Low;
+        var b = comp.StateB != SignalState.Low;
         var output = false;
         switch (comp.Gate)
         {
@@ -122,12 +148,7 @@ public sealed class LogicGateSystem : EntitySystem
         {
             comp.LastOutput = output;
 
-            var data = new NetworkPayload
-            {
-                [DeviceNetworkConstants.LogicState] = output ? SignalState.High : SignalState.Low
-            };
-
-            _deviceLink.InvokePort(uid, comp.OutputPort, data);
+            _deviceLink.SendSignal(uid, comp.OutputPort, output);
         }
     }
 }

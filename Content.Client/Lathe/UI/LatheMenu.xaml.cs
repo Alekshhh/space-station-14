@@ -1,4 +1,6 @@
-﻿using System.Text;
+using System.Linq;
+using System.Text;
+using Content.Client.Materials;
 using Content.Shared.Lathe;
 using Content.Shared.Materials;
 using Content.Shared.Research.Prototypes;
@@ -14,77 +16,48 @@ namespace Content.Client.Lathe.UI;
 [GenerateTypedNameReferences]
 public sealed partial class LatheMenu : DefaultWindow
 {
-    [Dependency] private readonly IPrototypeManager _prototypeManager = default!;
     [Dependency] private readonly IEntityManager _entityManager = default!;
+    [Dependency] private readonly IPrototypeManager _prototypeManager = default!;
     private readonly SpriteSystem _spriteSystem;
     private readonly LatheSystem _lathe;
+    private readonly MaterialStorageSystem _materialStorage;
 
-    public event Action<BaseButton.ButtonEventArgs>? OnQueueButtonPressed;
     public event Action<BaseButton.ButtonEventArgs>? OnServerListButtonPressed;
-    public event Action<BaseButton.ButtonEventArgs>? OnServerSyncButtonPressed;
     public event Action<string, int>? RecipeQueueAction;
 
-    public List<string> Recipes = new();
+    public List<ProtoId<LatheRecipePrototype>> Recipes = new();
 
     public LatheMenu(LatheBoundUserInterface owner)
     {
         RobustXamlLoader.Load(this);
         IoCManager.InjectDependencies(this);
 
-        _spriteSystem = _entityManager.EntitySysManager.GetEntitySystem<SpriteSystem>();
-        _lathe = _entityManager.EntitySysManager.GetEntitySystem<LatheSystem>();
+        _spriteSystem = _entityManager.System<SpriteSystem>();
+        _lathe = _entityManager.System<LatheSystem>();
+        _materialStorage = _entityManager.System<MaterialStorageSystem>();
 
-        Title = _entityManager.GetComponent<MetaDataComponent>(owner.Lathe).EntityName;
+        Title = _entityManager.GetComponent<MetaDataComponent>(owner.Owner).EntityName;
 
         SearchBar.OnTextChanged += _ =>
         {
-            PopulateRecipes(owner.Lathe);
+            PopulateRecipes(owner.Owner);
         };
         AmountLineEdit.OnTextChanged += _ =>
         {
-            PopulateRecipes(owner.Lathe);
+            PopulateRecipes(owner.Owner);
         };
 
-        QueueButton.OnPressed += a => OnQueueButtonPressed?.Invoke(a);
         ServerListButton.OnPressed += a => OnServerListButtonPressed?.Invoke(a);
 
-        //refresh the bui state
-        ServerSyncButton.OnPressed += a => OnServerSyncButtonPressed?.Invoke(a);
-
-        if (_entityManager.TryGetComponent<LatheComponent>(owner.Lathe, out var latheComponent))
+        if (_entityManager.TryGetComponent<LatheComponent>(owner.Owner, out var latheComponent))
         {
-            if (latheComponent.DynamicRecipes == null)
+            if (!latheComponent.DynamicRecipes.Any())
             {
                 ServerListButton.Visible = false;
-                ServerSyncButton.Visible = false;
             }
         }
-    }
 
-    public void PopulateMaterials(EntityUid lathe)
-    {
-        if (!_entityManager.TryGetComponent<MaterialStorageComponent>(lathe, out var materials))
-            return;
-
-        Materials.Clear();
-
-        foreach (var (id, amount) in materials.Storage)
-        {
-            if (!_prototypeManager.TryIndex(id, out MaterialPrototype? material))
-                continue;
-            var name = Loc.GetString(material.Name);
-            var mat = Loc.GetString("lathe-menu-material-display",
-                ("material", name), ("amount", amount));
-            Materials.AddItem(mat, _spriteSystem.Frame0(material.Icon), false);
-        }
-
-        if (Materials.Count == 0)
-        {
-            var noMaterialsMsg = Loc.GetString("lathe-menu-no-materials-message");
-            Materials.AddItem(noMaterialsMsg, null, false);
-        }
-
-        PopulateRecipes(lathe);
+        MaterialsList.SetOwner(owner.Owner);
     }
 
     /// <summary>
@@ -99,7 +72,7 @@ public sealed partial class LatheMenu : DefaultWindow
         var recipesToShow = new List<LatheRecipePrototype>();
         foreach (var recipe in Recipes)
         {
-            if (!_prototypeManager.TryIndex<LatheRecipePrototype>(recipe, out var proto))
+            if (!_prototypeManager.TryIndex(recipe, out var proto))
                 continue;
 
             if (SearchBar.Text.Trim().Length != 0)
@@ -132,11 +105,18 @@ public sealed partial class LatheMenu : DefaultWindow
                     sb.Append('\n');
 
                 var adjustedAmount = SharedLatheSystem.AdjustMaterial(amount, prototype.ApplyMaterialDiscount, component.MaterialUseMultiplier);
-                
-                sb.Append(adjustedAmount);
-                sb.Append(' ');
-                sb.Append(Loc.GetString(proto.Name));
+                var sheetVolume = _materialStorage.GetSheetVolume(proto);
+
+                var unit = Loc.GetString(proto.Unit);
+                // rounded in locale not here
+                var sheets = adjustedAmount / (float) sheetVolume;
+                var amountText = Loc.GetString("lathe-menu-material-amount", ("amount", sheets), ("unit", unit));
+                var name = Loc.GetString(proto.Name);
+                sb.Append(Loc.GetString("lathe-menu-tooltip-display", ("material", name), ("amount", amountText)));
             }
+
+            sb.Append('\n');
+            sb.Append(Loc.GetString("lathe-menu-description-display", ("description", prototype.Description)));
 
             var icon = prototype.Icon == null
                 ? _spriteSystem.GetPrototypeIcon(prototype.Result).Default
@@ -152,5 +132,34 @@ public sealed partial class LatheMenu : DefaultWindow
             };
             RecipeList.AddChild(control);
         }
+    }
+
+    /// <summary>
+    /// Populates the build queue list with all queued items
+    /// </summary>
+    /// <param name="queue"></param>
+    public void PopulateQueueList(List<LatheRecipePrototype> queue)
+    {
+        QueueList.Clear();
+        var idx = 1;
+        foreach (var recipe in queue)
+        {
+            var icon = recipe.Icon == null
+                ? _spriteSystem.GetPrototypeIcon(recipe.Result).Default
+                : _spriteSystem.Frame0(recipe.Icon);
+            QueueList.AddItem($"{idx}. {recipe.Name}", icon);
+            idx++;
+        }
+    }
+
+    public void SetQueueInfo(LatheRecipePrototype? recipe)
+    {
+        FabricatingContainer.Visible = recipe != null;
+        if (recipe == null)
+            return;
+        Icon.Texture = recipe.Icon == null
+            ? _spriteSystem.GetPrototypeIcon(recipe.Result).Default
+            : _spriteSystem.Frame0(recipe.Icon);
+        NameLabel.Text = $"{recipe.Name}";
     }
 }

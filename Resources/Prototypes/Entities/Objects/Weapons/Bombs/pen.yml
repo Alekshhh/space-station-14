@@ -16,6 +16,10 @@
     canCreateVacuum: false
   - type: ActivateOnPaperOpened
   - type: ExplodeOnTrigger
+  - type: TriggerOnSignal
+  - type: DeviceLinkSink
+    ports:
+      - Trigger
 
 - type: entity
   parent: BaseItem
@@ -23,10 +27,11 @@
   name: exploding pen box
   description: A small box containing an exploding pen. Packaging disintegrates when opened, leaving no evidence behind.
   components:
+  - type: Item
+    size: Tiny
   - type: Sprite
     sprite: Objects/Storage/penbox.rsi
     state: exploding_pen
-    netsync: false
   - type: SpawnItemsOnUse
     items:
     - id: PenExploding

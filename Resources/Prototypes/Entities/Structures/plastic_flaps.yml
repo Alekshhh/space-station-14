@@ -8,7 +8,6 @@
     mode: SnapgridCenter
   components:
   - type: Sprite
-    netsync: false
     sprite: Structures/plastic_flaps.rsi
     state: plasticflaps
     drawdepth: Mobs
@@ -28,7 +27,7 @@
         layer:
         - MidImpassable
   - type: Damageable
-    damageContainer: Inorganic
+    damageContainer: StructuralInorganic
     damageModifierSet: Metallic
   - type: Destructible
     thresholds:
@@ -45,7 +44,7 @@
     graph: PlasticFlapsGraph
     node: plasticFlaps
   - type: StaticPrice
-    price: 150
+    price: 83
 
 - type: entity
   id: PlasticFlapsOpaque

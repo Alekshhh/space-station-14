@@ -6,7 +6,6 @@
   components:
   - type: Sprite
     sprite: Objects/Consumable/Smokeables/Cannabis/joint.rsi
-    netsync: false
     state: unlit-icon
   - type: Tag
     tags:
@@ -18,17 +17,17 @@
     slots: [ mask ]
     equippedPrefix: unlit
   - type: Item
-    size: 1
+    size: Tiny
   - type: Construction
     graph: smokeableJoint
     node: joint
   - type: SolutionContainerManager
     solutions:
       smokable:
-        maxVol: 20
+        maxVol: 30
         reagents:
           - ReagentId: THC
-            Quantity: 10
+            Quantity: 20
 
 - type: entity
   id: Blunt
@@ -38,7 +37,6 @@
   components:
   - type: Sprite
     sprite: Objects/Consumable/Smokeables/Cannabis/blunt.rsi
-    netsync: false
     state: unlit-icon
   - type: Tag
     tags:
@@ -50,14 +48,14 @@
     slots: [ mask ]
     equippedPrefix: unlit
   - type: Item
-    size: 1
+    size: Tiny
   - type: Construction
     graph: smokeableBlunt
     node: blunt
   - type: SolutionContainerManager
     solutions:
       smokable:
-        maxVol: 20
+        maxVol: 30
         reagents:
           - ReagentId: THC
-            Quantity: 10
+            Quantity: 20

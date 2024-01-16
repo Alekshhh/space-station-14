@@ -1,3 +1,4 @@
+# When adding new food also add to random spawner located in Resources\Prototypes\Entities\Markers\Spawners\Random\Food_Drinks\food_baked_whole.yml & food_baked_single.yml
 # Base
 
 - type: entity
@@ -11,7 +12,9 @@
   - type: Food
   - type: Sprite
     sprite: Objects/Consumable/Food/Baked/bread.rsi
-    netsync: false
+  - type: Tag
+    tags:
+    - Bread
   - type: SolutionContainerManager
     solutions:
       food:
@@ -26,10 +29,12 @@
   abstract: true
   components:
   - type: Item
-    size: 1
+    size: Tiny
   - type: FlavorProfile
     flavors:
       - bread
+  - type: Tag
+    tags: [] #override bread
   - type: SolutionContainerManager
     solutions:
       food:
@@ -88,6 +93,10 @@
     - state: banana
   - type: SliceableFood
     slice: FoodBreadBananaSlice
+  - type: Tag
+    tags:
+    - Fruit
+    - Bread
 # Tastes like bread, banana, nut.
 
 - type: entity
@@ -104,6 +113,9 @@
   - type: Sprite
     layers:
     - state: banana-slice
+  - type: Tag
+    tags:
+    - Fruit
 
 - type: entity
   name: cornbread
@@ -230,6 +242,10 @@
           Quantity: 30
         - ReagentId: Vitamin
           Quantity: 5
+  - type: Tag
+    tags:
+    - Meat
+    - Bread
 # Tastes like bread, meat.
 
 - type: entity
@@ -255,6 +271,9 @@
           Quantity: 6
         - ReagentId: Vitamin
           Quantity: 1.2
+  - type: Tag
+    tags:
+    - Meat
 
 - type: entity
   name: mimana bread
@@ -366,6 +385,10 @@
           Quantity: 5
         - ReagentId: Protein
           Quantity: 5
+  - type: Tag
+    tags:
+    - Meat
+    - Bread
 
 - type: entity
   name: sausage bread slice
@@ -392,6 +415,9 @@
           Quantity: 1
         - ReagentId: Protein
           Quantity: 1
+  - type: Tag
+    tags:
+    - Meat
 
 - type: entity
   name: spider meat bread
@@ -412,14 +438,16 @@
   - type: SolutionContainerManager
     solutions:
       food:
-        maxVol: 60
+        maxVol: 45
         reagents:
         - ReagentId: Nutriment
           Quantity: 30
         - ReagentId: Vitamin
           Quantity: 5
-        - ReagentId: Toxin
-          Quantity: 15
+  - type: Tag
+    tags:
+    - Meat
+    - Bread
 # Tastes like bread, cobwebs.
 
 - type: entity
@@ -439,14 +467,15 @@
   - type: SolutionContainerManager
     solutions:
       food:
-        maxVol: 15
+        maxVol: 12
         reagents:
         - ReagentId: Nutriment
           Quantity: 6
         - ReagentId: Vitamin
           Quantity: 1.2
-        - ReagentId: Toxin
-          Quantity: 3
+  - type: Tag
+    tags:
+    - Meat
 
 - type: entity
   name: tofu bread
@@ -524,6 +553,10 @@
           Quantity: 30
         - ReagentId: Vitamin
           Quantity: 5
+  - type: Tag
+    tags:
+    - Meat
+    - Bread
 # Tastes like bread, acid.
 
 - type: entity
@@ -549,6 +582,9 @@
           Quantity: 6
         - ReagentId: Vitamin
           Quantity: 1.2
+  - type: Tag
+    tags:
+    - Meat
 
 # Other than bread/slices
 
@@ -563,6 +599,9 @@
     - Baguette
   - type: Sprite
     state: baguette
+  - type: SliceableFood
+    count: 12
+    slice: FoodBreadBaguetteSlice
   - type: SolutionContainerManager
     solutions:
       food:
@@ -577,6 +616,28 @@
         - ReagentId: Blackpepper
           Quantity: 1
 # Tastes like France.
+
+- type: entity
+  name: crostini
+  parent: FoodBreadSliceBase
+  id: FoodBreadBaguetteSlice
+  description: Bon ap-petite!
+  components:
+  - type: Sprite
+    state: crostini
+  - type: SolutionContainerManager
+    solutions:
+      food:
+        maxVol: 2
+        reagents:
+        - ReagentId: Nutriment
+          Quantity: 0.5
+        - ReagentId: Vitamin
+          Quantity: 0.1
+        - ReagentId: TableSalt
+          Quantity: 0.1
+        - ReagentId: Blackpepper
+          Quantity: 0.1
 
 - type: entity
   name: buttered toast
@@ -602,7 +663,7 @@
 # Tastes like bread, butter.
 
 - type: entity
-  name: f toast
+  name: french toast
   parent: FoodBreadSliceBase
   id: FoodBreadFrenchToast
   description: A slice of bread soaked in a beaten egg mixture.
@@ -713,3 +774,64 @@
         - ReagentId: Wine
           Quantity: 5
 # Tastes like decaying fungus.
+
+- type: entity
+  name: bread dog
+  id: MobBreadDog
+  parent: FoodBreadSausage
+  description: It's a bread. It's a dog. It's a... breaddog?
+  components:
+  - type: Sprite
+    noRot: true
+    drawdepth: Mobs
+    sprite: Mobs/Pets/breaddog.rsi
+    layers:
+    - map: ["enum.DamageStateVisualLayers.Base"]
+      state: base
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeCircle
+          radius: 0.35
+        density: 50
+        mask:
+        - MobMask
+        layer:
+        - MobLayer
+  - type: RotationVisuals
+    defaultRotation: 0
+    horizontalRotation: 0
+  - type: Item
+    size: Ginormous
+  - type: GhostRole
+    prob: 1
+    name: ghost-role-information-BreadDog-name
+    allowMovement: true
+    description: ghost-role-information-BreadDog-description
+    rules: ghost-role-information-BreadDog-rules
+  - type: GhostTakeoverAvailable
+  - type: BarkAccent
+  - type: Speech
+    speechSounds: Dog
+    speechVerb: SmallMob
+  - type: MovementSpeedModifier
+    baseWalkSpeed : 5
+    baseSprintSpeed : 3
+  - type: Tag
+    tags:
+    - VimPilot
+    - DoorBumpOpener
+  - type: CanEscapeInventory
+    baseResistTime: 2
+  - type: Puller
+    needsHands: false
+  - type: Examiner
+  - type: CombatMode
+  - type: MeleeWeapon
+    soundHit:
+      path: /Audio/Animals/dog_bark1.ogg
+    hidden: true
+    damage:
+      groups:
+        Brute: 1

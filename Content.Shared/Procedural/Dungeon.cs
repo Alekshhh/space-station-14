@@ -2,17 +2,26 @@ namespace Content.Shared.Procedural;
 
 public sealed class Dungeon
 {
-    /// <summary>
-    /// Starting position used to generate the dungeon from.
-    /// </summary>
-    public Vector2i Position;
-
-    public Vector2i Center;
-
-    public List<DungeonRoom> Rooms = new();
+    public readonly List<DungeonRoom> Rooms;
 
     /// <summary>
     /// Hashset of the tiles across all rooms.
     /// </summary>
-    public HashSet<Vector2i> RoomTiles = new();
+    public readonly HashSet<Vector2i> RoomTiles = new();
+
+    public readonly HashSet<Vector2i> RoomExteriorTiles = new();
+
+    public readonly HashSet<Vector2i> CorridorTiles = new();
+
+    public readonly HashSet<Vector2i> CorridorExteriorTiles = new();
+
+    public Dungeon()
+    {
+        Rooms = new List<DungeonRoom>();
+    }
+
+    public Dungeon(List<DungeonRoom> rooms)
+    {
+        Rooms = rooms;
+    }
 }

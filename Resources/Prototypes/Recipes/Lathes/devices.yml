@@ -23,6 +23,15 @@
     Plastic: 200
 
 - type: latheRecipe
+  id: Igniter
+  result: Igniter
+  completetime: 2
+  materials:
+    Steel: 300
+    Plastic: 100
+    Glass: 100
+
+- type: latheRecipe
   id: ChemicalPayload
   result: ChemicalPayload
   completetime: 2
@@ -33,12 +42,23 @@
 - type: latheRecipe
   id: FlashPayload
   result: FlashPayload
-  completetime: 1
+  completetime: 2
   materials:
     Steel: 50
     Plastic: 100
     Glass: 50
     #one fourth of what making a flash would cost
+
+- type: latheRecipe
+  id: ExplosivePayload
+  result: ExplosivePayload
+  completetime: 4
+  materials:
+    Steel: 100
+    Plastic: 100
+    Glass: 50
+    Plasma: 50
+    Silver: 50
 
 - type: latheRecipe
   id: Signaller
@@ -52,6 +72,14 @@
 - type: latheRecipe
   id: AnomalyLocator
   result: AnomalyLocatorEmpty
+  completetime: 3
+  materials:
+    Steel: 400
+    Glass: 100
+
+- type: latheRecipe
+  id: AnomalyLocatorWide
+  result: AnomalyLocatorWideEmpty
   completetime: 3
   materials:
     Steel: 400
@@ -74,6 +102,17 @@
     Glass: 400
 
 - type: latheRecipe
+  id: WeaponGauntletGorilla
+  result: WeaponGauntletGorilla
+  completetime: 5
+  materials:
+    Steel: 1500
+    Plastic: 300
+    Glass: 500
+    Plasma: 500
+    Silver: 250
+
+- type: latheRecipe
   id: ClothingBackpackHolding
   result: ClothingBackpackHolding
   completetime: 5
@@ -81,7 +120,7 @@
     Steel: 2000
     Silver: 750
     Plasma: 1500
-    Uranium: 1500
+    Uranium: 150
 
 - type: latheRecipe
   id: ClothingBackpackSatchelHolding
@@ -91,7 +130,7 @@
     Steel: 2000
     Silver: 750
     Plasma: 1500
-    Uranium: 1500
+    Uranium: 150
 
 - type: latheRecipe
   id: ClothingBackpackDuffelHolding
@@ -101,7 +140,44 @@
     Steel: 2000
     Silver: 750
     Plasma: 1500
-    Uranium: 1500
+    Uranium: 150
+
+- type: latheRecipe
+  id: OreBagOfHolding
+  result: OreBagOfHolding
+  completetime: 5
+  materials:
+    Steel: 2000
+    Silver: 750
+    Plasma: 1500
+    Uranium: 150
+
+- type: latheRecipe
+  id: WeaponCrusher
+  result: WeaponCrusher
+  completetime: 5
+  materials:
+    Steel: 1000
+    Glass: 250
+    Plastic: 100
+
+- type: latheRecipe
+  id: WeaponCrusherDagger
+  result: WeaponCrusherDagger
+  completetime: 5
+  materials:
+    Steel: 500
+    Glass: 250
+    Plastic: 50
+
+- type: latheRecipe
+  id: WeaponCrusherGlaive
+  result: WeaponCrusherGlaive
+  completetime: 5
+  materials:
+    Steel: 1500
+    Glass: 250
+    Silver: 250
 
 - type: latheRecipe
   id: WeaponForceGun
@@ -111,6 +187,24 @@
     Steel: 500
     Glass: 400
     Silver: 200
+
+- type: latheRecipe
+  id: DeviceQuantumSpinInverter
+  result: DeviceQuantumSpinInverter
+  completetime: 5
+  materials:
+    Steel: 700
+    Glass: 100
+    Uranium: 100
+
+- type: latheRecipe
+  id: WeaponProtoKineticAccelerator
+  result: WeaponProtoKineticAccelerator
+  completetime: 5
+  materials:
+    Steel: 1000
+    Glass: 500
+    Silver: 100
 
 - type: latheRecipe
   id: WeaponTetherGun

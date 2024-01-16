@@ -22,7 +22,6 @@
         - TableLayer
   - type: SpriteFade
   - type: Sprite
-    netsync: false
   - type: Icon
     state: full
   - type: IconSmooth
@@ -36,6 +35,9 @@
     bonkSound: !type:SoundCollectionSpecifier
       collection: TrayHit
   - type: Clickable
+  - type: FootstepModifier
+    footstepSoundCollection:
+      collection: FootstepHull
 
 - type: entity
   id: CounterBase

@@ -1,8 +1,11 @@
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Content.Server.Administration.Logs;
 using Content.Server.IP;
 using Content.Server.Preferences.Managers;
 using Content.Shared.CCVar;
@@ -20,27 +23,29 @@ namespace Content.Server.Database
     {
         private readonly Func<DbContextOptions<SqliteServerDbContext>> _options;
 
-        // This doesn't allow concurrent access so that's what the semaphore is for.
-        // That said, this is bloody SQLite, I don't even think EFCore bothers to truly async it.
-        private readonly SemaphoreSlim _prefsSemaphore;
+        private readonly ConcurrencySemaphore _prefsSemaphore;
 
         private readonly Task _dbReadyTask;
 
         private int _msDelay;
 
-        public ServerDbSqlite(Func<DbContextOptions<SqliteServerDbContext>> options, bool inMemory)
+        public ServerDbSqlite(
+            Func<DbContextOptions<SqliteServerDbContext>> options,
+            bool inMemory,
+            IConfigurationManager cfg,
+            bool synchronous,
+            ISawmill opsLog)
+            : base(opsLog)
         {
             _options = options;
 
             var prefsCtx = new SqliteServerDbContext(options());
 
-            var cfg = IoCManager.Resolve<IConfigurationManager>();
-
             // When inMemory we re-use the same connection, so we can't have any concurrency.
             var concurrency = inMemory ? 1 : cfg.GetCVar(CCVars.DatabaseSqliteConcurrency);
-            _prefsSemaphore = new SemaphoreSlim(concurrency, concurrency);
+            _prefsSemaphore = new ConcurrencySemaphore(concurrency, synchronous);
 
-            if (cfg.GetCVar(CCVars.DatabaseSynchronous))
+            if (synchronous)
             {
                 prefsCtx.Database.Migrate();
                 _dbReadyTask = Task.CompletedTask;
@@ -134,22 +139,17 @@ namespace Content.Server.Database
             ServerBanExemptFlags? exemptFlags)
         {
             if (!exemptFlags.GetValueOrDefault(ServerBanExemptFlags.None).HasFlag(ServerBanExemptFlags.IP)
-                && address != null && ban.Address is not null && IPAddressExt.IsInSubnet(address, ban.Address.Value))
+                && address != null && ban.Address is not null && address.IsInSubnet(ban.Address.ToTuple().Value))
             {
                 return true;
             }
 
-            if (userId is { } id && ban.UserId == id.UserId)
+            if (userId is { } id && ban.PlayerUserId == id.UserId)
             {
                 return true;
             }
 
-            if (hwId is { } hwIdVar && hwIdVar.Length > 0 && hwIdVar.AsSpan().SequenceEqual(ban.HWId))
-            {
-                return true;
-            }
-
-            return false;
+            return hwId is { Length: > 0 } hwIdVar && hwIdVar.AsSpan().SequenceEqual(ban.HWId);
         }
 
         public override async Task AddServerBanAsync(ServerBanDef serverBan)
@@ -158,13 +158,16 @@ namespace Content.Server.Database
 
             db.SqliteDbContext.Ban.Add(new ServerBan
             {
-                Address = serverBan.Address,
+                Address = serverBan.Address.ToNpgsqlInet(),
                 Reason = serverBan.Reason,
+                Severity = serverBan.Severity,
                 BanningAdmin = serverBan.BanningAdmin?.UserId,
                 HWId = serverBan.HWId?.ToArray(),
                 BanTime = serverBan.BanTime.UtcDateTime,
                 ExpirationTime = serverBan.ExpirationTime?.UtcDateTime,
-                UserId = serverBan.UserId?.UserId
+                RoundId = serverBan.RoundId,
+                PlaytimeAtNote = serverBan.PlaytimeAtNote,
+                PlayerUserId = serverBan.UserId?.UserId
             });
 
             await db.SqliteDbContext.SaveChangesAsync();
@@ -198,7 +201,8 @@ namespace Content.Server.Database
             return ConvertRoleBan(ban);
         }
 
-        public override async Task<List<ServerRoleBanDef>> GetServerRoleBansAsync(IPAddress? address,
+        public override async Task<List<ServerRoleBanDef>> GetServerRoleBansAsync(
+            IPAddress? address,
             NetUserId? userId,
             ImmutableArray<byte>? hwId,
             bool includeUnbanned)
@@ -235,41 +239,41 @@ namespace Content.Server.Database
             NetUserId? userId,
             ImmutableArray<byte>? hwId)
         {
-            if (address != null && ban.Address is not null && IPAddressExt.IsInSubnet(address, ban.Address.Value))
+            if (address != null && ban.Address is not null && address.IsInSubnet(ban.Address.ToTuple().Value))
             {
                 return true;
             }
 
-            if (userId is { } id && ban.UserId == id.UserId)
+            if (userId is { } id && ban.PlayerUserId == id.UserId)
             {
                 return true;
             }
 
-            if (hwId is { } hwIdVar && hwIdVar.Length > 0 && hwIdVar.AsSpan().SequenceEqual(ban.HWId))
-            {
-                return true;
-            }
-
-            return false;
+            return hwId is { Length: > 0 } hwIdVar && hwIdVar.AsSpan().SequenceEqual(ban.HWId);
         }
 
-        public override async Task AddServerRoleBanAsync(ServerRoleBanDef serverBan)
+        public override async Task<ServerRoleBanDef> AddServerRoleBanAsync(ServerRoleBanDef serverBan)
         {
             await using var db = await GetDbImpl();
 
-            db.SqliteDbContext.RoleBan.Add(new ServerRoleBan
+            var ban = new ServerRoleBan
             {
-                Address = serverBan.Address,
+                Address = serverBan.Address.ToNpgsqlInet(),
                 Reason = serverBan.Reason,
+                Severity = serverBan.Severity,
                 BanningAdmin = serverBan.BanningAdmin?.UserId,
                 HWId = serverBan.HWId?.ToArray(),
                 BanTime = serverBan.BanTime.UtcDateTime,
                 ExpirationTime = serverBan.ExpirationTime?.UtcDateTime,
-                UserId = serverBan.UserId?.UserId,
+                RoundId = serverBan.RoundId,
+                PlaytimeAtNote = serverBan.PlaytimeAtNote,
+                PlayerUserId = serverBan.UserId?.UserId,
                 RoleId = serverBan.Role,
-            });
+            };
+            db.SqliteDbContext.RoleBan.Add(ban);
 
             await db.SqliteDbContext.SaveChangesAsync();
+            return ConvertRoleBan(ban);
         }
 
         public override async Task AddServerRoleUnbanAsync(ServerRoleUnbanDef serverUnban)
@@ -286,6 +290,7 @@ namespace Content.Server.Database
             await db.SqliteDbContext.SaveChangesAsync();
         }
 
+        [return: NotNullIfNotNull(nameof(ban))]
         private static ServerRoleBanDef? ConvertRoleBan(ServerRoleBan? ban)
         {
             if (ban == null)
@@ -294,7 +299,7 @@ namespace Content.Server.Database
             }
 
             NetUserId? uid = null;
-            if (ban.UserId is { } guid)
+            if (ban.PlayerUserId is { } guid)
             {
                 uid = new NetUserId(guid);
             }
@@ -310,12 +315,15 @@ namespace Content.Server.Database
             return new ServerRoleBanDef(
                 ban.Id,
                 uid,
-                ban.Address,
+                ban.Address.ToTuple(),
                 ban.HWId == null ? null : ImmutableArray.Create(ban.HWId),
                 // SQLite apparently always reads DateTime as unspecified, but we always write as UTC.
                 DateTime.SpecifyKind(ban.BanTime, DateTimeKind.Utc),
                 ban.ExpirationTime == null ? null : DateTime.SpecifyKind(ban.ExpirationTime.Value, DateTimeKind.Utc),
+                ban.RoundId,
+                ban.PlaytimeAtNote,
                 ban.Reason,
+                ban.Severity,
                 aUid,
                 unban,
                 ban.RoleId);
@@ -361,7 +369,7 @@ namespace Content.Server.Database
             }
 
             NetUserId? uid = null;
-            if (ban.UserId is { } guid)
+            if (ban.PlayerUserId is { } guid)
             {
                 uid = new NetUserId(guid);
             }
@@ -377,12 +385,15 @@ namespace Content.Server.Database
             return new ServerBanDef(
                 ban.Id,
                 uid,
-                ban.Address,
+                ban.Address.ToTuple(),
                 ban.HWId == null ? null : ImmutableArray.Create(ban.HWId),
                 // SQLite apparently always reads DateTime as unspecified, but we always write as UTC.
                 DateTime.SpecifyKind(ban.BanTime, DateTimeKind.Utc),
                 ban.ExpirationTime == null ? null : DateTime.SpecifyKind(ban.ExpirationTime.Value, DateTimeKind.Utc),
+                ban.RoundId,
+                ban.PlaytimeAtNote,
                 ban.Reason,
+                ban.Severity,
                 aUid,
                 unban);
         }
@@ -407,12 +418,13 @@ namespace Content.Server.Database
                 DateTime.SpecifyKind(unban.UnbanTime, DateTimeKind.Utc));
         }
 
-        public override async Task<int>  AddConnectionLogAsync(
+        public override async Task<int> AddConnectionLogAsync(
             NetUserId userId,
             string userName,
             IPAddress address,
             ImmutableArray<byte> hwId,
-            ConnectionDenyReason? denied)
+            ConnectionDenyReason? denied,
+            int serverId)
         {
             await using var db = await GetDbImpl();
 
@@ -423,7 +435,8 @@ namespace Content.Server.Database
                 UserId = userId.UserId,
                 UserName = userName,
                 HWId = hwId.ToArray(),
-                Denied = denied
+                Denied = denied,
+                ServerId = serverId
             };
 
             db.SqliteDbContext.ConnectionLog.Add(connectionLog);
@@ -477,6 +490,15 @@ namespace Content.Server.Database
             return round.Id;
         }
 
+        protected override IQueryable<AdminLog> StartAdminLogsQuery(ServerDbContext db, LogFilter? filter = null)
+        {
+            IQueryable<AdminLog> query = db.AdminLog;
+            if (filter?.Search != null)
+                query = query.Where(log => EF.Functions.Like(log.Message, $"%{filter.Search}%"));
+
+            return query;
+        }
+
         public override async Task<int> AddAdminNote(AdminNote note)
         {
             await using (var db = await GetDb())
@@ -484,7 +506,7 @@ namespace Content.Server.Database
                 var nextId = 1;
                 if (await db.DbContext.AdminNotes.AnyAsync())
                 {
-                    nextId = await db.DbContext.AdminNotes.MaxAsync(dbVersion => dbVersion.Id) + 1;
+                    nextId = await db.DbContext.AdminNotes.MaxAsync(adminNote => adminNote.Id) + 1;
                 }
 
                 note.Id = nextId;
@@ -492,9 +514,41 @@ namespace Content.Server.Database
 
             return await base.AddAdminNote(note);
         }
-
-        private async Task<DbGuardImpl> GetDbImpl()
+        public override async Task<int> AddAdminWatchlist(AdminWatchlist watchlist)
         {
+            await using (var db = await GetDb())
+            {
+                var nextId = 1;
+                if (await db.DbContext.AdminWatchlists.AnyAsync())
+                {
+                    nextId = await db.DbContext.AdminWatchlists.MaxAsync(adminWatchlist => adminWatchlist.Id) + 1;
+                }
+
+                watchlist.Id = nextId;
+            }
+
+            return await base.AddAdminWatchlist(watchlist);
+        }
+
+        public override async Task<int> AddAdminMessage(AdminMessage message)
+        {
+            await using (var db = await GetDb())
+            {
+                var nextId = 1;
+                if (await db.DbContext.AdminMessages.AnyAsync())
+                {
+                    nextId = await db.DbContext.AdminMessages.MaxAsync(adminMessage => adminMessage.Id) + 1;
+                }
+
+                message.Id = nextId;
+            }
+
+            return await base.AddAdminMessage(message);
+        }
+
+        private async Task<DbGuardImpl> GetDbImpl([CallerMemberName] string? name = null)
+        {
+            LogDbOp(name);
             await _dbReadyTask;
             if (_msDelay > 0)
                 await Task.Delay(_msDelay);
@@ -506,9 +560,9 @@ namespace Content.Server.Database
             return new DbGuardImpl(this, dbContext);
         }
 
-        protected override async Task<DbGuard> GetDb()
+        protected override async Task<DbGuard> GetDb([CallerMemberName] string? name = null)
         {
-            return await GetDbImpl().ConfigureAwait(false);
+            return await GetDbImpl(name).ConfigureAwait(false);
         }
 
         private sealed class DbGuardImpl : DbGuard
@@ -529,6 +583,69 @@ namespace Content.Server.Database
             {
                 await _ctx.DisposeAsync();
                 _db._prefsSemaphore.Release();
+            }
+        }
+
+        private sealed class ConcurrencySemaphore
+        {
+            private readonly bool _synchronous;
+            private readonly SemaphoreSlim _semaphore;
+            private Thread? _holdingThread;
+
+            public ConcurrencySemaphore(int maxCount, bool synchronous)
+            {
+                if (synchronous && maxCount != 1)
+                    throw new ArgumentException("If synchronous, max concurrency must be 1");
+
+                _synchronous = synchronous;
+                _semaphore = new SemaphoreSlim(maxCount, maxCount);
+            }
+
+            public Task WaitAsync()
+            {
+                var task = _semaphore.WaitAsync();
+
+                if (_synchronous)
+                {
+                    if (!task.IsCompleted)
+                    {
+                        if (Thread.CurrentThread == _holdingThread)
+                        {
+                            throw new InvalidOperationException(
+                                "Multiple database requests from same thread on synchronous database!");
+                        }
+
+                        throw new InvalidOperationException(
+                            $"Different threads trying to access the database at once! " +
+                            $"Holding thread: {DiagThread(_holdingThread)}, " +
+                            $"current thread: {DiagThread(Thread.CurrentThread)}");
+                    }
+
+                    _holdingThread = Thread.CurrentThread;
+                }
+
+                return task;
+            }
+
+            public void Release()
+            {
+                if (_synchronous)
+                {
+                    if (Thread.CurrentThread != _holdingThread)
+                        throw new InvalidOperationException("Released on different thread than took lock???");
+
+                    _holdingThread = null;
+                }
+
+                _semaphore.Release();
+            }
+
+            private static string DiagThread(Thread? thread)
+            {
+                if (thread != null)
+                    return $"{thread.Name} ({thread.ManagedThreadId})";
+
+                return "<null thread>";
             }
         }
     }

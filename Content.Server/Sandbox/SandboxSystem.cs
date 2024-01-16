@@ -13,6 +13,7 @@ using Robust.Server.Console;
 using Robust.Server.Placement;
 using Robust.Server.Player;
 using Robust.Shared.Enums;
+using Robust.Shared.Player;
 
 namespace Content.Server.Sandbox
 {
@@ -93,7 +94,7 @@ namespace Content.Server.Sandbox
             if (e.NewStatus != SessionStatus.Connected || e.OldStatus != SessionStatus.Connecting)
                 return;
 
-            RaiseNetworkEvent(new MsgSandboxStatus {SandboxAllowed = IsSandboxEnabled}, e.Session.ConnectedClient);
+            RaiseNetworkEvent(new MsgSandboxStatus { SandboxAllowed = IsSandboxEnabled }, e.Session.ConnectedClient);
         }
 
         private void SandboxRespawnReceived(MsgSandboxRespawn message, EntitySessionEventArgs args)
@@ -113,7 +114,7 @@ namespace Content.Server.Sandbox
                 return;
 
             var player = _playerManager.GetSessionByChannel(args.SenderSession.ConnectedClient);
-            if (player.AttachedEntity is not {} attached)
+            if (player.AttachedEntity is not { } attached)
             {
                 return;
             }
@@ -128,19 +129,19 @@ namespace Content.Server.Sandbox
                 {
                     UpgradeId(slotEntity.Value);
                 }
-                else if (TryComp<PDAComponent>(slotEntity, out var pda))
+                else if (TryComp<PdaComponent>(slotEntity, out var pda))
                 {
-                    if (pda.ContainedID == null)
+                    if (pda.ContainedId is null)
                     {
                         var newID = CreateFreshId();
-                        if (TryComp<ItemSlotsComponent>(pda.Owner, out var itemSlots))
+                        if (TryComp<ItemSlotsComponent>(slotEntity, out var itemSlots))
                         {
                             _slots.TryInsert(slotEntity.Value, pda.IdSlot, newID, null);
                         }
                     }
                     else
                     {
-                        UpgradeId(pda.ContainedID.Owner);
+                        UpgradeId(pda.ContainedId!.Value);
                     }
                 }
             }
@@ -189,7 +190,7 @@ namespace Content.Server.Sandbox
 
         private void UpdateSandboxStatusForAll()
         {
-            RaiseNetworkEvent(new MsgSandboxStatus {SandboxAllowed = IsSandboxEnabled});
+            RaiseNetworkEvent(new MsgSandboxStatus { SandboxAllowed = IsSandboxEnabled });
         }
     }
 }

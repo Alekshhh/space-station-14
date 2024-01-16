@@ -1,10 +1,8 @@
 using System.Linq;
 using Content.Shared.GameTicking;
 using Content.Server.Station.Components;
-using Robust.Server.Player;
 using Robust.Shared.Network;
 using Robust.Shared.Player;
-using Robust.Shared.Players;
 using System.Text;
 
 namespace Content.Server.GameTicking
@@ -44,7 +42,8 @@ namespace Content.Server.GameTicking
 
         private string GetInfoText()
         {
-            if (Preset == null)
+            var preset = CurrentPreset ?? Preset;
+            if (preset == null)
             {
                 return string.Empty;
             }
@@ -69,40 +68,38 @@ namespace Content.Server.GameTicking
 
             if (!foundOne)
             {
-                stationNames.Append(Loc.GetString("game-ticker-no-map-selected"));
+                stationNames.Append(_gameMapManager.GetSelectedMap()?.MapName ??
+                                    Loc.GetString("game-ticker-no-map-selected"));
             }
 
-            var gmTitle = Loc.GetString(Preset.ModeTitle);
-            var desc = Loc.GetString(Preset.Description);
-            return Loc.GetString(RunLevel == GameRunLevel.PreRoundLobby ? "game-ticker-get-info-preround-text" : "game-ticker-get-info-text",
-                ("roundId", RoundId), ("playerCount", playerCount), ("readyCount", readyCount), ("mapName", stationNames.ToString()),("gmTitle", gmTitle),("desc", desc));
+            var gmTitle = Loc.GetString(preset.ModeTitle);
+            var desc = Loc.GetString(preset.Description);
+            return Loc.GetString(
+                RunLevel == GameRunLevel.PreRoundLobby
+                    ? "game-ticker-get-info-preround-text"
+                    : "game-ticker-get-info-text",
+                ("roundId", RoundId),
+                ("playerCount", playerCount),
+                ("readyCount", readyCount),
+                ("mapName", stationNames.ToString()),
+                ("gmTitle", gmTitle),
+                ("desc", desc));
         }
 
-        private TickerLobbyReadyEvent GetStatusSingle(ICommonSession player, PlayerGameStatus gameStatus)
+        private TickerConnectionStatusEvent GetConnectionStatusMsg()
         {
-            return new (new Dictionary<NetUserId, PlayerGameStatus> { { player.UserId, gameStatus } });
+            return new TickerConnectionStatusEvent(RoundStartTimeSpan);
         }
 
-        private TickerLobbyReadyEvent GetPlayerStatus()
-        {
-            var players = new Dictionary<NetUserId, PlayerGameStatus>();
-            foreach (var player in _playerGameStatuses.Keys)
-            {
-                _playerGameStatuses.TryGetValue(player, out var status);
-                players.Add(player, status);
-            }
-            return new TickerLobbyReadyEvent(players);
-        }
-
-        private TickerLobbyStatusEvent GetStatusMsg(IPlayerSession session)
+        private TickerLobbyStatusEvent GetStatusMsg(ICommonSession session)
         {
             _playerGameStatuses.TryGetValue(session.UserId, out var status);
-            return new TickerLobbyStatusEvent(RunLevel != GameRunLevel.PreRoundLobby, LobbySong, LobbyBackground,status == PlayerGameStatus.ReadyToPlay, _roundStartTime, RoundPreloadTime, _roundStartTimeSpan, Paused);
+            return new TickerLobbyStatusEvent(RunLevel != GameRunLevel.PreRoundLobby, LobbySong, LobbyBackground, status == PlayerGameStatus.ReadyToPlay, _roundStartTime, RoundPreloadTime, RoundStartTimeSpan, Paused);
         }
 
         private void SendStatusToAll()
         {
-            foreach (var player in _playerManager.ServerSessions)
+            foreach (var player in _playerManager.Sessions)
             {
                 RaiseNetworkEvent(GetStatusMsg(player), player.ConnectedClient);
             }
@@ -160,11 +157,10 @@ namespace Content.Server.GameTicking
                 if (!_playerManager.TryGetSessionById(playerUserId, out var playerSession))
                     continue;
                 RaiseNetworkEvent(GetStatusMsg(playerSession), playerSession.ConnectedClient);
-                RaiseNetworkEvent(GetStatusSingle(playerSession, status));
             }
         }
 
-        public void ToggleReady(IPlayerSession player, bool ready)
+        public void ToggleReady(ICommonSession player, bool ready)
         {
             if (!_playerGameStatuses.ContainsKey(player.UserId))
                 return;
@@ -180,7 +176,6 @@ namespace Content.Server.GameTicking
             var status = ready ? PlayerGameStatus.ReadyToPlay : PlayerGameStatus.NotReadyToPlay;
             _playerGameStatuses[player.UserId] = ready ? PlayerGameStatus.ReadyToPlay : PlayerGameStatus.NotReadyToPlay;
             RaiseNetworkEvent(GetStatusMsg(player), player.ConnectedClient);
-            RaiseNetworkEvent(GetStatusSingle(player, status));
             // update server info to reflect new ready count
             UpdateInfoText();
         }

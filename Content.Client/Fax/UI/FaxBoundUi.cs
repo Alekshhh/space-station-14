@@ -7,9 +7,10 @@ namespace Content.Client.Fax.UI;
 [UsedImplicitly]
 public sealed class FaxBoundUi : BoundUserInterface
 {
+    [ViewVariables]
     private FaxWindow? _window;
 
-    public FaxBoundUi(ClientUserInterfaceComponent owner, Enum uiKey) : base(owner, uiKey)
+    public FaxBoundUi(EntityUid owner, Enum uiKey) : base(owner, uiKey)
     {
     }
 
@@ -21,6 +22,7 @@ public sealed class FaxBoundUi : BoundUserInterface
         _window.OpenCentered();
 
         _window.OnClose += Close;
+        _window.CopyButtonPressed += OnCopyButtonPressed;
         _window.SendButtonPressed += OnSendButtonPressed;
         _window.RefreshButtonPressed += OnRefreshButtonPressed;
         _window.PeerSelected += OnPeerSelected;
@@ -29,6 +31,11 @@ public sealed class FaxBoundUi : BoundUserInterface
     private void OnSendButtonPressed()
     {
         SendMessage(new FaxSendMessage());
+    }
+
+    private void OnCopyButtonPressed()
+    {
+        SendMessage(new FaxCopyMessage());
     }
 
     private void OnRefreshButtonPressed()

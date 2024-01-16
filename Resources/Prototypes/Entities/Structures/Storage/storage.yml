@@ -18,7 +18,6 @@
   - type: Sprite
     sprite: Structures/Furniture/furniture.rsi
     state: rack
-    netsync: false
     snapCardinals: true
   - type: Fixtures
     fixtures:
@@ -49,6 +48,8 @@
       - !type:PlaySoundBehavior
         sound:
           path: /Audio/Effects/metalbreak.ogg
+          params:
+            volume: -6
       - !type:SpawnEntitiesBehavior
         spawn:
           SheetSteel1:
@@ -58,4 +59,4 @@
         acts: [ "Destruction" ]
   - type: Climbable
   - type: StaticPrice
-    price: 150
+    price: 22

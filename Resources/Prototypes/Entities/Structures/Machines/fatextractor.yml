@@ -9,9 +9,8 @@
       path: /Audio/Machines/microwave_loop.ogg
       params:
         loop: true
-        maxdistance: 5
+        maxDistance: 5
   - type: Sprite
-    netsync: false
     sprite: Structures/Machines/fat_sucker.rsi
     snapCardinals: true
     layers:
@@ -97,10 +96,11 @@
     board: FatExtractorMachineCircuitboard
   - type: WiresPanel
   - type: Wires
-    BoardName: FatExtractor
-    LayoutId: FatExtractor
+    boardName: wires-board-name-fatextractor
+    layoutId: FatExtractor
   - type: Appearance
   - type: Speech
+    speechVerb: Robotic
   - type: Advertise
     pack: FatExtractorFacts
   - type: StaticPrice

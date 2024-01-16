@@ -13,11 +13,11 @@
     sound:
       path: /Audio/Ambience/Objects/hdd_buzz.ogg
   - type: PointLight
-    netsync: false
     radius: 1.5
     energy: 1.6
     color: "#3db83b"
     castShadows: false
+    netsync: false
   - type: Clickable
   - type: AccessReader
     access: [["Engineering"]]
@@ -26,7 +26,6 @@
     anchored: true
   - type: Sprite
     drawdepth: WallMountedItems
-    netsync: false
     sprite: Structures/Power/apc.rsi
     layers:
     - state: base
@@ -66,13 +65,17 @@
       output:
         !type:CableDeviceNode
         nodeGroupID: Apc
+  - type: PowerMonitoringDevice
+    group: APC
+    sourceNode: input
+    loadNode: output
+    collectionName: apc
+    sprite: Structures/Power/apc.rsi
+    state: static
   - type: BatteryCharger
     voltage: Medium
   - type: PowerProvider
     voltage: Apc
-  - type: Breaker
-    # 100A at 240V - 24kW
-    limit: 24000
   - type: Apc
     voltage: Apc
   - type: ExtensionCableProvider
@@ -95,8 +98,8 @@
   - type: WallMount
   - type: WiresPanel
   - type: Wires
-    BoardName: "APC"
-    LayoutId: APC
+    boardName: wires-board-name-apc
+    layoutId: APC
   - type: WiresVisuals
   - type: Damageable
     damageContainer: Inorganic
@@ -128,6 +131,8 @@
     requirePower: true
     mediumVoltageNode: input
     lowVoltageNode: output
+  - type: LightningTarget
+    priority: 1
   - type: StaticPrice
     price: 500
 
@@ -146,7 +151,6 @@
     anchored: true
   - type: Sprite
     drawdepth: WallMountedItems
-    netsync: false
     sprite: Structures/Power/apc.rsi
     state: frame
   - type: Construction

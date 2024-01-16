@@ -1,8 +1,9 @@
-using System.Linq;
 using Content.Shared.Movement.Components;
-using Robust.Client.GameObjects;
+using Robust.Shared.GameStates;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
+using Robust.Shared.Network;
+using Robust.Shared.Player;
 
 namespace Content.Client.Replay.Spectator;
 
@@ -13,61 +14,125 @@ public sealed partial class ReplaySpectatorSystem
     /// <summary>
     /// Simple struct containing position & rotation data for maintaining a persistent view when jumping around in time.
     /// </summary>
-    public struct SpectatorPosition
+    public struct SpectatorData
     {
         // TODO REPLAYS handle ghost-following.
+
+        /// <summary>
+        /// The current entity being spectated.
+        /// </summary>
         public EntityUid Entity;
+
+        /// <summary>
+        /// The player that was originally controlling <see cref="Entity"/>
+        /// </summary>
+        public NetUserId Controller;
+
         public (EntityCoordinates Coords, Angle Rot)? Local;
         public (EntityCoordinates Coords, Angle Rot)? World;
         public (EntityUid? Ent, Angle Rot)? Eye;
     }
 
-    public SpectatorPosition GetSpectatorPosition()
+    public SpectatorData GetSpectatorData()
     {
-        var obs = new SpectatorPosition();
-        if (_player.LocalPlayer?.ControlledEntity is { } player && TryComp(player, out TransformComponent? xform) && xform.MapUid != null)
-        {
-            obs.Local = (xform.Coordinates, xform.LocalRotation);
-            obs.World = (new(xform.MapUid.Value, xform.WorldPosition), xform.WorldRotation);
+        var data = new SpectatorData();
+        if (_player.LocalEntity is not { } player)
+            return data;
 
-            if (TryComp(player, out InputMoverComponent? mover))
-                obs.Eye = (mover.RelativeEntity, mover.TargetRelativeRotation);
+        data.Controller = _player.LocalUser ?? DefaultUser;
 
-            obs.Entity = player;
-        }
+        if (!TryComp(player, out TransformComponent? xform) || xform.MapUid == null)
+            return data;
 
-        return obs;
+        data.Local = (xform.Coordinates, xform.LocalRotation);
+        var (pos, rot) = _transform.GetWorldPositionRotation(player);
+        data.World = (new(xform.MapUid.Value, pos), rot);
+
+        if (TryComp(player, out InputMoverComponent? mover))
+            data.Eye = (mover.RelativeEntity, mover.TargetRelativeRotation);
+
+        data.Entity = player;
+
+        return data;
     }
 
     private void OnBeforeSetTick()
     {
-        _oldPosition = GetSpectatorPosition();
+        _spectatorData = GetSpectatorData();
     }
 
     private void OnAfterSetTick()
     {
-        if (_oldPosition != null)
-            SetSpectatorPosition(_oldPosition.Value);
-        _oldPosition = null;
+        if (_spectatorData != null)
+            SetSpectatorPosition(_spectatorData.Value);
+        _spectatorData = null;
     }
 
-    public void SetSpectatorPosition(SpectatorPosition spectatorPosition)
+    private void OnBeforeApplyState((GameState Current, GameState? Next) args)
     {
-        if (Exists(spectatorPosition.Entity) && Transform(spectatorPosition.Entity).MapID != MapId.Nullspace)
+        // Before applying the game state, we want to check to see if a recorded player session is about to
+        // get attached to the entity that we are currently spectating. If it is, then we switch out local session
+        // to the recorded session. I.e., we switch from spectating the entity to spectating the session.
+        // This is required because having multiple sessions attached to a single entity is not currently supported.
+
+        if (_player.LocalUser != DefaultUser)
+            return; // Already spectating some session.
+
+        if (_player.LocalEntity is not {} uid)
+            return;
+
+        var netEnt = GetNetEntity(uid);
+        if (netEnt.IsClientSide())
+            return;
+
+        foreach (var playerState in args.Current.PlayerStates.Value)
         {
-            _player.LocalPlayer!.AttachEntity(spectatorPosition.Entity, EntityManager, _client);
+            if (playerState.ControlledEntity != netEnt)
+                continue;
+
+            if (!_player.TryGetSessionById(playerState.UserId, out var session))
+                session = _player.CreateAndAddSession(playerState.UserId, playerState.Name);
+
+            _player.SetLocalSession(session);
+            break;
+        }
+    }
+
+    public void SetSpectatorPosition(SpectatorData data)
+    {
+        if (_player.LocalSession == null)
+            return;
+
+        if (data.Controller != DefaultUser)
+        {
+            // the "local player" is currently set to some recorded session. As long as that session has an entity, we
+            // do nothing here
+            if (_player.TryGetSessionById(data.Controller, out var session)
+                && Exists(session.AttachedEntity))
+            {
+                _player.SetLocalSession(session);
+                return;
+            }
+
+            // Spectated session is no longer valid - return to the client-side session
+            _player.SetLocalSession(_player.GetSessionById(DefaultUser));
+        }
+
+        if (Exists(data.Entity) && Transform(data.Entity).MapID != MapId.Nullspace)
+        {
+            _player.SetAttachedEntity(_player.LocalSession, data.Entity);
             return;
         }
 
-        if (spectatorPosition.Local != null && spectatorPosition.Local.Value.Coords.IsValid(EntityManager))
+        if (data.Local != null && data.Local.Value.Coords.IsValid(EntityManager))
         {
-            var newXform = SpawnSpectatorGhost(spectatorPosition.Local.Value.Coords, false);
-            newXform.LocalRotation = spectatorPosition.Local.Value.Rot;
+            var newXform = SpawnSpectatorGhost(data.Local.Value.Coords, false);
+            newXform.LocalRotation = data.Local.Value.Rot;
         }
-        else if (spectatorPosition.World != null && spectatorPosition.World.Value.Coords.IsValid(EntityManager))
+        else if (data.World != null && data.World.Value.Coords.IsValid(EntityManager))
         {
-            var newXform = SpawnSpectatorGhost(spectatorPosition.World.Value.Coords, true);
-            newXform.LocalRotation = spectatorPosition.World.Value.Rot;
+            var newXform = SpawnSpectatorGhost(data.World.Value.Coords, true);
+            newXform.LocalRotation = data.World.Value.Rot;
         }
         else if (TryFindFallbackSpawn(out var coords))
         {
@@ -76,29 +141,46 @@ public sealed partial class ReplaySpectatorSystem
         }
         else
         {
-            Logger.Error("Failed to find a suitable observer spawn point");
+            Log.Error("Failed to find a suitable observer spawn point");
             return;
         }
 
-        if (spectatorPosition.Eye != null && TryComp(_player.LocalPlayer?.ControlledEntity, out InputMoverComponent? newMover))
+        if (data.Eye != null && TryComp(_player.LocalSession.AttachedEntity, out InputMoverComponent? newMover))
         {
-            newMover.RelativeEntity = spectatorPosition.Eye.Value.Ent;
-            newMover.TargetRelativeRotation = newMover.RelativeRotation = spectatorPosition.Eye.Value.Rot;
+            newMover.RelativeEntity = data.Eye.Value.Ent;
+            newMover.TargetRelativeRotation = newMover.RelativeRotation = data.Eye.Value.Rot;
         }
     }
 
     private bool TryFindFallbackSpawn(out EntityCoordinates coords)
     {
-        var uid = EntityQuery<MapGridComponent>()
-            .OrderByDescending(x => x.LocalAABB.Size.LengthSquared)
-            .FirstOrDefault()?.Owner;
-        coords = new EntityCoordinates(uid ?? default, default);
-        return uid != null;
+        if (_replayPlayback.TryGetRecorderEntity(out var recorder))
+        {
+            coords = new EntityCoordinates(recorder.Value, default);
+            return true;
+        }
+
+        Entity<MapGridComponent>? maxUid = null;
+        float? maxSize = null;
+        var gridQuery = EntityQueryEnumerator<MapGridComponent>();
+
+        while (gridQuery.MoveNext(out var uid, out var grid))
+        {
+            var size = grid.LocalAABB.Size.LengthSquared();
+            if (maxSize == null || size > maxSize)
+            {
+                maxUid = (uid, grid);
+                maxSize = size;
+            }
+        }
+
+        coords = new EntityCoordinates(maxUid ?? default, default);
+        return maxUid != null;
     }
 
     private void OnTerminating(EntityUid uid, ReplaySpectatorComponent component, ref EntityTerminatingEvent args)
     {
-        if (uid != _player.LocalPlayer?.ControlledEntity)
+        if (uid != _player.LocalEntity)
             return;
 
         var xform = Transform(uid);
@@ -110,7 +192,7 @@ public sealed partial class ReplaySpectatorSystem
 
     private void OnParentChanged(EntityUid uid, ReplaySpectatorComponent component, ref EntParentChangedMessage args)
     {
-        if (uid != _player.LocalPlayer?.ControlledEntity)
+        if (uid != _player.LocalEntity)
             return;
 
         if (args.Transform.MapUid != null || args.OldMapId == MapId.Nullspace)
@@ -122,9 +204,9 @@ public sealed partial class ReplaySpectatorSystem
         SetSpectatorPosition(default);
     }
 
-    private void OnDetached(EntityUid uid, ReplaySpectatorComponent component, PlayerDetachedEvent args)
+    private void OnDetached(EntityUid uid, ReplaySpectatorComponent component, LocalPlayerDetachedEvent args)
     {
-        if (uid.IsClientSide())
+        if (IsClientSide(uid))
             QueueDel(uid);
         else
             RemCompDeferred(uid, component);

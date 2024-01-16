@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using Content.Shared.Stacks;
-using NUnit.Framework;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Utility;
@@ -53,10 +52,14 @@ public abstract partial class InteractionTest
         }
 
         public void Remove(EntitySpecifier spec)
-            => Add(new EntitySpecifier(spec.Prototype, -spec.Quantity, spec.Converted));
+        {
+            Add(new EntitySpecifier(spec.Prototype, -spec.Quantity, spec.Converted));
+        }
 
         public void Add(EntitySpecifier spec)
-            => Add(spec.Prototype, spec.Quantity, spec.Converted);
+        {
+            Add(spec.Prototype, spec.Quantity, spec.Converted);
+        }
 
         public void Add(string id, int quantity, bool converted = false)
         {
@@ -153,7 +156,9 @@ public abstract partial class InteractionTest
 
     protected EntitySpecifierCollection ToEntityCollection(IEnumerable<EntityUid> entities)
     {
-        var collection = new EntitySpecifierCollection(entities.Select(uid => ToEntitySpecifier(uid)));
+        var collection = new EntitySpecifierCollection(entities
+            .Select(ToEntitySpecifier)
+            .OfType<EntitySpecifier>());
         Assert.That(collection.Converted);
         return collection;
     }

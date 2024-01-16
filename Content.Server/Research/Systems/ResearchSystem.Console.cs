@@ -1,6 +1,9 @@
 using Content.Server.Power.EntitySystems;
 using Content.Server.Research.Components;
+using Content.Server.UserInterface;
+using Content.Shared.Access.Components;
 using Content.Shared.Research.Components;
+using Content.Shared.Research.Prototypes;
 
 namespace Content.Server.Research.Systems;
 
@@ -9,6 +12,7 @@ public sealed partial class ResearchSystem
     private void InitializeConsole()
     {
         SubscribeLocalEvent<ResearchConsoleComponent, ConsoleUnlockTechnologyMessage>(OnConsoleUnlock);
+        SubscribeLocalEvent<ResearchConsoleComponent, BeforeActivatableUIOpenEvent>(OnConsoleBeforeUiOpened);
         SubscribeLocalEvent<ResearchConsoleComponent, ResearchServerPointsChangedEvent>(OnPointsChanged);
         SubscribeLocalEvent<ResearchConsoleComponent, ResearchRegistrationChangedEvent>(OnConsoleRegistrationChanged);
         SubscribeLocalEvent<ResearchConsoleComponent, TechnologyDatabaseModifiedEvent>(OnConsoleDatabaseModified);
@@ -16,14 +20,35 @@ public sealed partial class ResearchSystem
 
     private void OnConsoleUnlock(EntityUid uid, ResearchConsoleComponent component, ConsoleUnlockTechnologyMessage args)
     {
+        if (args.Session.AttachedEntity is not { } ent)
+            return;
+
         if (!this.IsPowered(uid, EntityManager))
             return;
 
-        if (!UnlockTechnology(uid, args.Id))
+        if (!PrototypeManager.TryIndex<TechnologyPrototype>(args.Id, out var technologyPrototype))
             return;
 
+        if (TryComp<AccessReaderComponent>(uid, out var access) && !_accessReader.IsAllowed(ent, uid, access))
+        {
+            _popup.PopupEntity(Loc.GetString("research-console-no-access-popup"), ent);
+            return;
+        }
+
+        if (!UnlockTechnology(uid, args.Id, ent))
+            return;
+
+        var message = Loc.GetString("research-console-unlock-technology-radio-broadcast",
+            ("technology", Loc.GetString(technologyPrototype.Name)),
+            ("amount", technologyPrototype.Cost));
+        _radio.SendRadioMessage(uid, message, component.AnnouncementChannel, uid, escapeMarkup: false);
         SyncClientWithServer(uid);
         UpdateConsoleInterface(uid, component);
+    }
+
+    private void OnConsoleBeforeUiOpened(EntityUid uid, ResearchConsoleComponent component, BeforeActivatableUIOpenEvent args)
+    {
+        SyncClientWithServer(uid);
     }
 
     private void UpdateConsoleInterface(EntityUid uid, ResearchConsoleComponent? component = null, ResearchClientComponent? clientComponent = null)

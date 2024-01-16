@@ -7,7 +7,6 @@
   components:
   - type: Anchorable
   - type: Transform
-    noRot: true
   - type: Prayable
   - type: Damageable
     damageContainer: Inorganic
@@ -25,7 +24,6 @@
         layer:
         - TableLayer
   - type: Sprite
-    netsync: false
     snapCardinals: true
   - type: Climbable
   - type: Clickable
@@ -66,6 +64,8 @@
             max: 3
       - !type:DoActsBehavior
         acts: [ "Destruction" ]
+  - type: StealTarget
+    stealGroup: AltarNanotrasen
 
 - type: entity
   id: AltarChaos

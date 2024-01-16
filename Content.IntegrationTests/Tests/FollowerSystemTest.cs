@@ -1,10 +1,6 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
+using Content.Server.GameTicking;
 using Content.Shared.Follower;
-using NUnit.Framework;
 using Robust.Shared.GameObjects;
-using Robust.Shared.IoC;
 using Robust.Shared.Log;
 using Robust.Shared.Map;
 
@@ -19,8 +15,8 @@ public sealed class FollowerSystemTest
     [Test]
     public async Task FollowerMapDeleteTest()
     {
-        await using var pairTracker = await PoolManager.GetServerClient(new (){NoClient = true});
-        var server = pairTracker.Pair.Server;
+        await using var pair = await PoolManager.GetServerClient();
+        var server = pair.Server;
 
         var entMan = server.ResolveDependency<IEntityManager>();
         var mapMan = server.ResolveDependency<IMapManager>();
@@ -36,17 +32,17 @@ public sealed class FollowerSystemTest
             var map = mapMan.CreateMap();
 
             // Spawn an observer to be followed.
-            var followed = entMan.SpawnEntity("MobObserver", new MapCoordinates(0, 0, map));
+            var followed = entMan.SpawnEntity(GameTicker.ObserverPrototypeName, new MapCoordinates(0, 0, map));
             logger.Info($"Spawned followed observer: {entMan.ToPrettyString(followed)}");
 
             // Spawn an observer to follow another observer.
-            var follower = entMan.SpawnEntity("MobObserver", new MapCoordinates(0, 0, map));
+            var follower = entMan.SpawnEntity(GameTicker.ObserverPrototypeName, new MapCoordinates(0, 0, map));
             logger.Info($"Spawned follower observer: {entMan.ToPrettyString(follower)}");
 
             followerSystem.StartFollowingEntity(follower, followed);
 
             entMan.DeleteEntity(mapMan.GetMapEntityId(map));
         });
-        await pairTracker.CleanReturnAsync();
+        await pair.CleanReturnAsync();
     }
 }

@@ -1,7 +1,7 @@
 using System.Linq;
+using System.Numerics;
 using Content.Server.Administration.Logs;
 using Content.Server.Cargo.Systems;
-using Content.Server.Examine;
 using Content.Server.Interaction;
 using Content.Server.Power.EntitySystems;
 using Content.Server.Stunnable;
@@ -9,6 +9,7 @@ using Content.Server.Weapons.Ranged.Components;
 using Content.Shared.Damage;
 using Content.Shared.Damage.Systems;
 using Content.Shared.Database;
+using Content.Shared.Effects;
 using Content.Shared.FixedPoint;
 using Content.Shared.Interaction.Components;
 using Content.Shared.Projectiles;
@@ -16,6 +17,7 @@ using Content.Shared.Weapons.Melee;
 using Content.Shared.Weapons.Ranged;
 using Content.Shared.Weapons.Ranged.Components;
 using Content.Shared.Weapons.Ranged.Events;
+using Content.Shared.Weapons.Ranged.Systems;
 using Content.Shared.Weapons.Reflect;
 using Robust.Server.GameObjects;
 using Robust.Shared.Audio;
@@ -25,7 +27,6 @@ using Robust.Shared.Physics.Components;
 using Robust.Shared.Player;
 using Robust.Shared.Prototypes;
 using Robust.Shared.Utility;
-using SharedGunSystem = Content.Shared.Weapons.Ranged.Systems.SharedGunSystem;
 
 namespace Content.Server.Weapons.Ranged.Systems;
 
@@ -33,13 +34,14 @@ public sealed partial class GunSystem : SharedGunSystem
 {
     [Dependency] private readonly IAdminLogManager _adminLogger = default!;
     [Dependency] private readonly IComponentFactory _factory = default!;
-    [Dependency] private readonly ExamineSystem _examine = default!;
+    [Dependency] private readonly BatterySystem _battery = default!;
+    [Dependency] private readonly DamageExamineSystem _damageExamine = default!;
     [Dependency] private readonly InteractionSystem _interaction = default!;
     [Dependency] private readonly PricingSystem _pricing = default!;
+    [Dependency] private readonly SharedColorFlashEffectSystem _color = default!;
+    [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly StaminaSystem _stamina = default!;
     [Dependency] private readonly StunSystem _stun = default!;
-    [Dependency] private readonly SharedTransformSystem _transform = default!;
-    [Dependency] private readonly BatterySystem _battery = default!;
 
     public const float DamagePitchVariation = SharedMeleeWeaponSystem.DamagePitchVariation;
     public const float GunClumsyChance = 0.5f;
@@ -52,12 +54,12 @@ public sealed partial class GunSystem : SharedGunSystem
 
     private void OnBallisticPrice(EntityUid uid, BallisticAmmoProviderComponent component, ref PriceCalculationEvent args)
     {
-        if (string.IsNullOrEmpty(component.FillProto) || component.UnspawnedCount == 0)
+        if (string.IsNullOrEmpty(component.Proto) || component.UnspawnedCount == 0)
             return;
 
-        if (!ProtoManager.TryIndex<EntityPrototype>(component.FillProto, out var proto))
+        if (!ProtoManager.TryIndex<EntityPrototype>(component.Proto, out var proto))
         {
-            Sawmill.Error($"Unable to find fill prototype for price on {component.FillProto} on {ToPrettyString(uid)}");
+            Log.Error($"Unable to find fill prototype for price on {component.Proto} on {ToPrettyString(uid)}");
             return;
         }
 
@@ -73,7 +75,7 @@ public sealed partial class GunSystem : SharedGunSystem
 
         // Try a clumsy roll
         // TODO: Who put this here
-        if (TryComp<ClumsyComponent>(user, out var clumsy))
+        if (TryComp<ClumsyComponent>(user, out var clumsy) && gun.ClumsyProof == false)
         {
             for (var i = 0; i < ammo.Count; i++)
             {
@@ -108,7 +110,7 @@ public sealed partial class GunSystem : SharedGunSystem
             : new EntityCoordinates(MapManager.GetMapEntityId(fromMap.MapId), fromMap.Position);
 
         // Update shot based on the recoil
-        toMap = fromMap.Position + angle.ToVec() * mapDirection.Length;
+        toMap = fromMap.Position + angle.ToVec() * mapDirection.Length();
         mapDirection = toMap - fromMap.Position;
         var gunVelocity = Physics.GetMapLinearVelocity(gunUid);
 
@@ -131,6 +133,27 @@ public sealed partial class GunSystem : SharedGunSystem
                 case CartridgeAmmoComponent cartridge:
                     if (!cartridge.Spent)
                     {
+                        if (gun.CompatibleAmmo != null &&
+                            !gun.CompatibleAmmo.Exists(ammoAllowed => ammoAllowed.Equals(cartridge.Prototype))
+                            && user != null)
+                        {
+                            if (gun.DamageOnWrongAmmo != null)
+                                Damageable.TryChangeDamage(user, gun.DamageOnWrongAmmo, origin: user);
+                            _stun.TryParalyze(user.Value, TimeSpan.FromSeconds(3f), true);
+
+                            Audio.PlayPvs(new SoundPathSpecifier("/Audio/Weapons/Guns/Gunshots/bang.ogg"), gunUid);
+
+                            PopupSystem.PopupEntity(Loc.GetString("gun-component-wrong-ammo"), user.Value);
+                            _adminLogger.Add(LogType.EntityDelete, LogImpact.Medium, $"Shot wrong ammo by {ToPrettyString(user.Value)} deleted {ToPrettyString(gunUid)}");
+                            userImpulse = false;
+
+                            SetCartridgeSpent(ent!.Value, cartridge, true);
+                            MuzzleFlash(gunUid, cartridge, user);
+                            Del(gunUid);
+                            if (cartridge.DeleteOnSpawn)
+                                Del(ent.Value);
+                            return;
+                        }
                         if (cartridge.Count > 1)
                         {
                             var angles = LinearSpread(mapAngle - cartridge.Spread / 2,
@@ -170,9 +193,9 @@ public sealed partial class GunSystem : SharedGunSystem
 
                     // Something like ballistic might want to leave it in the container still
                     if (!cartridge.DeleteOnSpawn && !Containers.IsEntityInContainer(ent!.Value))
-                        EjectCartridge(ent.Value);
+                        EjectCartridge(ent.Value, angle);
 
-                    Dirty(cartridge);
+                    Dirty(ent!.Value, cartridge);
                     break;
                 // Ammo shoots itself
                 case AmmoComponent newAmmo:
@@ -186,8 +209,9 @@ public sealed partial class GunSystem : SharedGunSystem
                     EntityUid? lastHit = null;
 
                     var from = fromMap;
-                    var fromEffect = fromCoordinates; // can't use map coords above because funny FireEffects
-                    var dir = mapDirection.Normalized;
+                    // can't use map coords above because funny FireEffects
+                    var fromEffect = fromCoordinates;
+                    var dir = mapDirection.Normalized();
                     var lastUser = user;
 
                     if (hitscan.Reflective != ReflectType.None)
@@ -204,7 +228,7 @@ public sealed partial class GunSystem : SharedGunSystem
                             var hit = result.HitEntity;
                             lastHit = hit;
 
-                            FireEffects(fromEffect, result.Distance, dir.Normalized.ToAngle(), hitscan, hit);
+                            FireEffects(fromEffect, result.Distance, dir.Normalized().ToAngle(), hitscan, hit);
 
                             var ev = new HitScanReflectAttemptEvent(user, gunUid, hitscan.Reflective, dir, false);
                             RaiseLocalEvent(hit, ref ev);
@@ -221,9 +245,9 @@ public sealed partial class GunSystem : SharedGunSystem
 
                     if (lastHit != null)
                     {
-                        EntityUid hitEntity = lastHit.Value;
+                        var hitEntity = lastHit.Value;
                         if (hitscan.StaminaDamage > 0f)
-                            _stamina.TakeStaminaDamage(hitEntity, hitscan.StaminaDamage, source:user);
+                            _stamina.TakeStaminaDamage(hitEntity, hitscan.StaminaDamage, source: user);
 
                         var dmg = hitscan.Damage;
 
@@ -236,8 +260,10 @@ public sealed partial class GunSystem : SharedGunSystem
                         {
                             if (!Deleted(hitEntity))
                             {
-                                if (dmg.Total > FixedPoint2.Zero)
-                                    RaiseNetworkEvent(new DamageEffectEvent(Color.Red, new List<EntityUid> {hitEntity}), Filter.Pvs(hitEntity, entityManager: EntityManager));
+                                if (dmg.Any())
+                                {
+                                    _color.RaiseEffect(Color.Red, new List<EntityUid>() { hitEntity }, Filter.Pvs(hitEntity, entityManager: EntityManager));
+                                }
 
                                 // TODO get fallback position for playing hit sound.
                                 PlayImpactSound(hitEntity, dmg, hitscan.Sound, hitscan.ForceSound);
@@ -278,33 +304,13 @@ public sealed partial class GunSystem : SharedGunSystem
         // Do a throw
         if (!HasComp<ProjectileComponent>(uid))
         {
-            RemComp<AmmoComponent>(uid);
+            RemoveShootable(uid);
             // TODO: Someone can probably yeet this a billion miles so need to pre-validate input somewhere up the call stack.
             ThrowingSystem.TryThrow(uid, mapDirection, gun.ProjectileSpeed, user);
             return;
         }
 
         ShootProjectile(uid, mapDirection, gunVelocity, gunUid, user, gun.ProjectileSpeed);
-    }
-
-    public void ShootProjectile(EntityUid uid, Vector2 direction, Vector2 gunVelocity, EntityUid gunUid, EntityUid? user = null, float speed = 20f)
-    {
-        var physics = EnsureComp<PhysicsComponent>(uid);
-        Physics.SetBodyStatus(physics, BodyStatus.InAir);
-
-        var targetMapVelocity = gunVelocity + direction.Normalized * speed;
-        var currentMapVelocity = Physics.GetMapLinearVelocity(uid, physics);
-        var finalLinear = physics.LinearVelocity + targetMapVelocity - currentMapVelocity;
-        Physics.SetLinearVelocity(uid, finalLinear, body: physics);
-
-        if (user != null)
-        {
-            var projectile = EnsureComp<ProjectileComponent>(uid);
-            Projectiles.SetShooter(projectile, user.Value);
-            projectile.Weapon = gunUid;
-        }
-
-        TransformSystem.SetWorldRotation(uid, direction.ToWorldAngle());
     }
 
     /// <summary>
@@ -341,7 +347,7 @@ public sealed partial class GunSystem : SharedGunSystem
         return angle;
     }
 
-    protected override void Popup(string message, EntityUid? uid, EntityUid? user) {}
+    protected override void Popup(string message, EntityUid? uid, EntityUid? user) { }
 
     protected override void CreateEffect(EntityUid uid, MuzzleFlashEvent message, EntityUid? user = null)
     {
@@ -393,7 +399,7 @@ public sealed partial class GunSystem : SharedGunSystem
         // Lord
         // Forgive me for the shitcode I am about to do
         // Effects tempt me not
-        var sprites = new List<(EntityCoordinates coordinates, Angle angle, SpriteSpecifier sprite, float scale)>();
+        var sprites = new List<(NetCoordinates coordinates, Angle angle, SpriteSpecifier sprite, float scale)>();
         var gridUid = fromCoordinates.GetGridUid(EntityManager);
         var angle = mapDirection;
 
@@ -416,18 +422,27 @@ public sealed partial class GunSystem : SharedGunSystem
         {
             if (hitscan.MuzzleFlash != null)
             {
-                sprites.Add((fromCoordinates.Offset(angle.ToVec().Normalized / 2), angle, hitscan.MuzzleFlash, 1f));
+                var coords = fromCoordinates.Offset(angle.ToVec().Normalized() / 2);
+                var netCoords = GetNetCoordinates(coords);
+
+                sprites.Add((netCoords, angle, hitscan.MuzzleFlash, 1f));
             }
 
             if (hitscan.TravelFlash != null)
             {
-                sprites.Add((fromCoordinates.Offset(angle.ToVec() * (distance + 0.5f) / 2), angle, hitscan.TravelFlash, distance - 1.5f));
+                var coords = fromCoordinates.Offset(angle.ToVec() * (distance + 0.5f) / 2);
+                var netCoords = GetNetCoordinates(coords);
+
+                sprites.Add((netCoords, angle, hitscan.TravelFlash, distance - 1.5f));
             }
         }
 
         if (hitscan.ImpactFlash != null)
         {
-            sprites.Add((fromCoordinates.Offset(angle.ToVec() * distance), angle.FlipPositive(), hitscan.ImpactFlash, 1f));
+            var coords = fromCoordinates.Offset(angle.ToVec() * distance);
+            var netCoords = GetNetCoordinates(coords);
+
+            sprites.Add((netCoords, angle.FlipPositive(), hitscan.ImpactFlash, 1f));
         }
 
         if (sprites.Count > 0)

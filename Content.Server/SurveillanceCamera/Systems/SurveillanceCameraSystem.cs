@@ -8,6 +8,7 @@ using Content.Shared.DeviceNetwork;
 using Content.Shared.SurveillanceCamera;
 using Content.Shared.Verbs;
 using Robust.Server.GameObjects;
+using Robust.Shared.Player;
 using Robust.Shared.Prototypes;
 
 namespace Content.Server.SurveillanceCamera;
@@ -58,7 +59,7 @@ public sealed class SurveillanceCameraSystem : EntitySystem
         SubscribeLocalEvent<SurveillanceCameraComponent, SurveillanceCameraSetupSetName>(OnSetName);
         SubscribeLocalEvent<SurveillanceCameraComponent, SurveillanceCameraSetupSetNetwork>(OnSetNetwork);
         SubscribeLocalEvent<SurveillanceCameraComponent, GetVerbsEvent<AlternativeVerb>>(AddVerbs);
-        
+
         SubscribeLocalEvent<SurveillanceCameraComponent, EmpPulseEvent>(OnEmpPulse);
         SubscribeLocalEvent<SurveillanceCameraComponent, EmpDisabledRemoved>(OnEmpDisabledRemoved);
     }
@@ -197,13 +198,12 @@ public sealed class SurveillanceCameraSystem : EntitySystem
 
     private void OpenSetupInterface(EntityUid uid, EntityUid player, SurveillanceCameraComponent? camera = null, ActorComponent? actor = null)
     {
-        if (!Resolve(uid, ref camera)
-            || !Resolve(player, ref actor))
-        {
+        if (!Resolve(uid, ref camera) || !Resolve(player, ref actor))
             return;
-        }
+        if (!_userInterface.TryGetUi(uid, SurveillanceCameraSetupUiKey.Camera, out var bui))
+            return;
 
-        _userInterface.GetUiOrNull(uid, SurveillanceCameraSetupUiKey.Camera)!.Open(actor.PlayerSession);
+        _userInterface.OpenUi(bui, actor.PlayerSession);
         UpdateSetupInterface(uid, camera);
     }
 

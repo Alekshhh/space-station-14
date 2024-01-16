@@ -22,6 +22,9 @@ ent-CrateServicePersonnel = Personnel crate
 ent-CrateServiceBooks = Books crate
     .desc = Contains 10 empty books of random appearance
 
+ent-CrateServiceGuidebooks = Guidebooks crate
+    .desc = Contains guidebooks.
+
 ent-CrateServiceBox = Boxes crate
     .desc = Contains 6 empty multipurpose boxes.
     
@@ -29,4 +32,7 @@ ent-CrateJanitorBiosuit = Janitor bio suit crate
     .desc = Contains 2 biohazard suits to ensure that no disease will distract you from cleaning.
 
 ent-CrateServiceTheatre = Theatrical performances crate
-    .desc = Contains a moth cloak, maid uniform, clown and mime attributes, and other performance charms.
+    .desc = Contains a moth cloak, barber scissors, maid uniform, clown and mime attributes, and other performance charms.
+
+ent-CrateJanitorExplosive = Janitorial bomb suit crate
+    .desc = Supplies a bomb suit for cleaning up any explosive compounds, buy one today!
